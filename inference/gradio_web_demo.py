@@ -22,7 +22,7 @@ from datetime import datetime, timedelta
 from openai import OpenAI
 import moviepy.editor as mp
 
-pipe = CogVideoXPipeline.from_pretrained("THUDM/CogVideoX-5b", torch_dtype=torch.bfloat16).to("cuda")
+pipe = CogVideoXPipeline.from_pretrained("THUDM/CogVideoX-2b", torch_dtype=torch.bfloat16).to("cuda")
 
 pipe.vae.enable_slicing()
 pipe.vae.enable_tiling()
@@ -144,37 +144,34 @@ def delete_old_files():
 threading.Thread(target=delete_old_files, daemon=True).start()
 
 with gr.Blocks() as demo:
+    gr.Image("klleon_logo_y_blue.png", show_label=False, interactive=False)
     gr.Markdown("""
            <div style="text-align: center; font-size: 32px; font-weight: bold; margin-bottom: 20px;">
-               CogVideoX Gradio Simple Space🤗
+               ✨Klleon Text to Video Generation✨
             """)
 
     with gr.Row():
         with gr.Column():
-            prompt = gr.Textbox(label="Prompt (Less than 200 Words)", placeholder="Enter your prompt here", lines=5)
-
-            with gr.Row():
-                gr.Markdown(
-                    "✨Upon pressing the enhanced prompt button, we will use [GLM-4 Model](https://github.com/THUDM/GLM-4) to polish the prompt and overwrite the original one."
-                )
-                enhance_button = gr.Button("✨ Enhance Prompt(Optional)")
+            prompt = gr.Textbox(label="Prompt (Less than 200 Words!)", placeholder="Enter your prompt here", lines=5)
 
             with gr.Column():
                 gr.Markdown(
-                    "**Optional Parameters** (default values are recommended)<br>"
-                    "Increasing the number of inference steps will produce more detailed videos, but it will slow down the process.<br>"
-                    "50 steps are recommended for most cases.<br>"
+                    "**Optional Parameters** <br>"
+                    "1. Inference Steps<br>"
+                    "- Increasing the number produce more detailed videos, but it will slow down the process.(50 steps are recommended for most cases.)<br>"
+                    "2. Guidance Scale <br>"
+                    "- A value for how closely the prompt input should be followed.(6~11 are recommended for most cases.)<br>"
                 )
                 with gr.Row():
                     num_inference_steps = gr.Number(label="Inference Steps", value=50)
                     guidance_scale = gr.Number(label="Guidance Scale", value=6.0)
-                generate_button = gr.Button("🎬 Generate Video")
+                generate_button = gr.Button("🎥Generate Video!🎥")
 
         with gr.Column():
-            video_output = gr.Video(label="CogVideoX Generate Video", width=720, height=480)
+            video_output = gr.Video(label="🎥Generate Video🎥", width=720, height=480)
             with gr.Row():
-                download_video_button = gr.File(label="📥 Download Video", visible=False)
-                download_gif_button = gr.File(label="📥 Download GIF", visible=False)
+                download_video_button = gr.File(label="Download Video", visible=False)
+                download_gif_button = gr.File(label="Download GIF", visible=False)
 
     def generate(prompt, num_inference_steps, guidance_scale, model_choice, progress=gr.Progress(track_tqdm=True)):
         tensor = infer(prompt, num_inference_steps, guidance_scale, progress=progress)
@@ -194,7 +191,5 @@ with gr.Blocks() as demo:
         outputs=[video_output, download_video_button, download_gif_button],
     )
 
-    enhance_button.click(enhance_prompt_func, inputs=[prompt], outputs=[prompt])
-
 if __name__ == "__main__":
-    demo.launch()
+    demo.launch(share=True)
