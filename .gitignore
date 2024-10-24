@@ -8,3 +8,7 @@ logs/
 .idea
 output*
 test*
+
+# gov
+inference/prompts.txt
+inference/prompts/

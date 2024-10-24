@@ -23,7 +23,7 @@ from diffusers import AutoencoderKLCogVideoX, CogVideoXTransformer3DModel, CogVi
 from diffusers.utils import export_to_video
 from transformers import T5EncoderModel
 from torchao.quantization import quantize_, int8_weight_only
-from torchao.float8.inference import ActivationCasting, QuantConfig, quantize_to_float8
+# from torchao.float8.inference import ActivationCasting, QuantConfig, quantize_to_float8
 
 os.environ["TORCH_LOGS"] = "+dynamo,output_code,graph_breaks,recompiles"
 torch._dynamo.config.suppress_errors = True
@@ -41,17 +41,7 @@ def quantize_model(part, quantization_scheme):
         quantize_to_float8(part, QuantConfig(ActivationCasting.DYNAMIC))
     return part
 
-
-def generate_video(
-    prompt: str,
-    model_path: str,
-    output_path: str = "./output.mp4",
-    num_inference_steps: int = 50,
-    guidance_scale: float = 6.0,
-    num_videos_per_prompt: int = 1,
-    quantization_scheme: str = "fp8",
-    dtype: torch.dtype = torch.bfloat16,
-):
+class T2VModel():
     """
     Generates a video based on the given prompt and saves it to the specified path.
 
@@ -65,43 +55,50 @@ def generate_video(
     - quantization_scheme (str): The quantization scheme to use ('int8', 'fp8').
     - dtype (torch.dtype): The data type for computation (default is torch.bfloat16).
     """
+    def __init__(
+        self,
+        model_path: str,
+        quantization_scheme: str = "fp8",
+        dtype: torch.dtype = torch.bfloat16,
+    ):
+        text_encoder = T5EncoderModel.from_pretrained(model_path, subfolder="text_encoder", torch_dtype=dtype)
+        text_encoder = quantize_model(part=text_encoder, quantization_scheme=quantization_scheme)
+        transformer = CogVideoXTransformer3DModel.from_pretrained(model_path, subfolder="transformer", torch_dtype=dtype)
+        transformer = quantize_model(part=transformer, quantization_scheme=quantization_scheme)
+        vae = AutoencoderKLCogVideoX.from_pretrained(model_path, subfolder="vae", torch_dtype=dtype)
+        vae = quantize_model(part=vae, quantization_scheme=quantization_scheme)
+        self.pipe = CogVideoXPipeline.from_pretrained(
+            model_path,
+            text_encoder=text_encoder,
+            transformer=transformer,
+            vae=vae,
+            torch_dtype=dtype,
+        )
+        self.pipe.scheduler = CogVideoXDPMScheduler.from_config(self.pipe.scheduler.config, timestep_spacing="trailing")
 
-    text_encoder = T5EncoderModel.from_pretrained(model_path, subfolder="text_encoder", torch_dtype=dtype)
-    text_encoder = quantize_model(part=text_encoder, quantization_scheme=quantization_scheme)
-    transformer = CogVideoXTransformer3DModel.from_pretrained(model_path, subfolder="transformer", torch_dtype=dtype)
-    transformer = quantize_model(part=transformer, quantization_scheme=quantization_scheme)
-    vae = AutoencoderKLCogVideoX.from_pretrained(model_path, subfolder="vae", torch_dtype=dtype)
-    vae = quantize_model(part=vae, quantization_scheme=quantization_scheme)
-    pipe = CogVideoXPipeline.from_pretrained(
-        model_path,
-        text_encoder=text_encoder,
-        transformer=transformer,
-        vae=vae,
-        torch_dtype=dtype,
-    )
-    pipe.scheduler = CogVideoXDPMScheduler.from_config(pipe.scheduler.config, timestep_spacing="trailing")
+        # Using with compile will run faster. First time infer will cost ~30min to compile.
+        # self.pipe.transformer.to(memory_format=torch.channels_last)
 
-    # Using with compile will run faster. First time infer will cost ~30min to compile.
-    # pipe.transformer.to(memory_format=torch.channels_last)
+        # for FP8 should remove self.pipe.enable_model_cpu_offload()
+        self.pipe.enable_model_cpu_offload()
 
-    # for FP8 should remove pipe.enable_model_cpu_offload()
-    pipe.enable_model_cpu_offload()
+        # This is not for FP8 and INT8 and should remove this line
+        # self.pipe.enable_sequential_cpu_offload()
+        self.pipe.vae.enable_slicing()
+        self.pipe.vae.enable_tiling()
 
-    # This is not for FP8 and INT8 and should remove this line
-    # pipe.enable_sequential_cpu_offload()
-    pipe.vae.enable_slicing()
-    pipe.vae.enable_tiling()
-    video = pipe(
-        prompt=prompt,
-        num_videos_per_prompt=num_videos_per_prompt,
-        num_inference_steps=num_inference_steps,
-        num_frames=49,
-        use_dynamic_cfg=True,
-        guidance_scale=guidance_scale,
-        generator=torch.Generator(device="cuda").manual_seed(42),
-    ).frames[0]
+    def generate_video(self, prompt, output_path, num_inference_steps, guidance_scale, num_videos_per_prompt):
+        video = self.pipe(
+            prompt=prompt,
+            num_videos_per_prompt=num_videos_per_prompt,
+            num_inference_steps=num_inference_steps,
+            num_frames=5,
+            use_dynamic_cfg=True,
+            guidance_scale=guidance_scale,
+            generator=torch.Generator(device="cuda").manual_seed(42),
+        ).frames[0]
 
-    export_to_video(video, output_path, fps=8)
+        export_to_video(video, output_path, fps=8)
 
 
 if __name__ == "__main__":
@@ -131,13 +128,17 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     dtype = torch.float16 if args.dtype == "float16" else torch.bfloat16
-    generate_video(
-        prompt=args.prompt,
+    print("Init model")
+    model = T2VModel(
         model_path=args.model_path,
+        quantization_scheme=args.quantization_scheme,
+        dtype=dtype,
+    )
+    print("Generate video")
+    model.generate_video(
+        prompt=args.prompt,
         output_path=args.output_path,
         num_inference_steps=args.num_inference_steps,
         guidance_scale=args.guidance_scale,
         num_videos_per_prompt=args.num_videos_per_prompt,
-        quantization_scheme=args.quantization_scheme,
-        dtype=dtype,
     )
