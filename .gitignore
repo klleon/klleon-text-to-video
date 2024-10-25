@@ -12,3 +12,4 @@ test*
 # gov
 inference/prompts.txt
 inference/prompts/
+inference/results

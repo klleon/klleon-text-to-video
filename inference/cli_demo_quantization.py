@@ -17,6 +17,9 @@ python cli_demo_quantization.py --prompt "A girl riding a bike." --model_path TH
 
 import argparse
 import os
+import time
+from tqdm import tqdm
+
 import torch
 import torch._dynamo
 from diffusers import AutoencoderKLCogVideoX, CogVideoXTransformer3DModel, CogVideoXPipeline, CogVideoXDPMScheduler
@@ -98,17 +101,25 @@ class T2VModel():
             generator=torch.Generator(device="cuda").manual_seed(42),
         ).frames[0]
 
+        if not os.path.exists(os.path.dirname(output_path)):
+            os.makedirs(os.path.dirname(output_path))
         export_to_video(video, output_path, fps=8)
 
+def check_prompt_args(prompt, prompt_file):
+    if prompt is None and prompt_file is None:
+        raise ValueError("Either 'prompt' or 'prompt_file' must be provided")
+    if prompt is not None and prompt_file is not None:
+        raise ValueError("Only one of 'prompt' or 'prompt_file' can be provided")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate a video from a text prompt using CogVideoX")
-    parser.add_argument("--prompt", type=str, required=True, help="The description of the video to be generated")
+    parser.add_argument("--prompt", type=str, help="The description of the video to be generated")
+    parser.add_argument("--prompt_file", type=str, help="Prompt file")
     parser.add_argument(
         "--model_path", type=str, default="THUDM/CogVideoX-5b", help="The path of the pre-trained model to be used"
     )
     parser.add_argument(
-        "--output_path", type=str, default="./output.mp4", help="The path where the generated video will be saved"
+        "--output_path", type=str, default="./results/output.mp4", help="The path where the generated video will be saved"
     )
     parser.add_argument(
         "--num_inference_steps", type=int, default=50, help="Number of steps for the inference process"
@@ -128,17 +139,43 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     dtype = torch.float16 if args.dtype == "float16" else torch.bfloat16
+    check_prompt_args(args.prompt, args.prompt_file)
+    
     print("Init model")
+    start = time.time()
     model = T2VModel(
         model_path=args.model_path,
         quantization_scheme=args.quantization_scheme,
         dtype=dtype,
     )
+    print(f"Model init time: {time.time() - start:.2f}s")
+
     print("Generate video")
-    model.generate_video(
-        prompt=args.prompt,
-        output_path=args.output_path,
-        num_inference_steps=args.num_inference_steps,
-        guidance_scale=args.guidance_scale,
-        num_videos_per_prompt=args.num_videos_per_prompt,
-    )
+    start = time.time()
+    if args.prompt is not None:
+        print(f"Prompt: {args.prompt}, len: {len(args.prompt)}")
+        model.generate_video(
+            prompt=args.prompt,
+            output_path=args.output_path,
+            num_inference_steps=args.num_inference_steps,
+            guidance_scale=args.guidance_scale,
+            num_videos_per_prompt=args.num_videos_per_prompt,
+        )
+    elif args.prompt_file is not None:
+        with open(args.prompt_file, "r") as f:
+            prompts = f.read().splitlines()
+            for prompt in tqdm(prompts):
+                # Remove the quotes from the prompt
+                prompt = prompt.strip('"')
+                print(f"Prompt: {prompt}, len: {len(prompt)}")
+                model.generate_video(
+                    prompt=prompt,
+                    output_path=args.output_path,
+                    num_inference_steps=args.num_inference_steps,
+                    guidance_scale=args.guidance_scale,
+                    num_videos_per_prompt=args.num_videos_per_prompt,
+                )
+    else:
+        raise ValueError("Either 'prompt' or 'prompt_file' must be provided")
+    print(f"Video generation time: {time.time() - start:.2f}s")
+    print("Done")
