@@ -170,7 +170,7 @@ if __name__ == "__main__":
                 print(f"Prompt: {prompt}, len: {len(prompt)}")
                 model.generate_video(
                     prompt=prompt,
-                    output_path=args.output_path,
+                    output_path="./results/" + prompt.replace(" ", "_") + ".mp4",
                     num_inference_steps=args.num_inference_steps,
                     guidance_scale=args.guidance_scale,
                     num_videos_per_prompt=args.num_videos_per_prompt,
