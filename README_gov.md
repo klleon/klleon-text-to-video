@@ -17,7 +17,7 @@ cd inference/
 python cli_demo_quantization.py --prompt "A girl riding a bike." --model_path THUDM/CogVideoX-2b
 ```
 
-### Gov test
+### Gov test [241028]
 1. Prepare `prompts.txt`
 2. Run `1_parse_prompts.sh` to parse the whole prompts into several small prompts.
 3. Run `2_run_inference.sh`
