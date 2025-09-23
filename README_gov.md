@@ -17,7 +17,8 @@ cd inference/
 python cli_demo_quantization.py --prompt "A girl riding a bike." --model_path THUDM/CogVideoX-2b
 ```
 
-### Gov test [241028]
+### Gov test [250925]
+0. `source .venv/bin/activate` in root directory.
 1. Prepare `prompts.txt`
 2. Run `1_parse_prompts.sh` to parse the whole prompts into several small prompts.
     - E.g., `/1_parse_prompts.sh prompts.txt 4`
