@@ -16,7 +16,7 @@ FILE="cli_demo_quantization.py"
 MODEL="THUDM/CogVideoX-2b"
 PROMPT="prompts/prompt_$GPU_ID.txt"
 
-RUN_COMMAND="CUDA_VISIBLE_DEVICES=$GPU_ID python $FILE --model_path $MODEL --prompt_file $PROMPT"
+RUN_COMMAND="CUDA_VISIBLE_DEVICES=$GPU_ID python $FILE --model_path $MODEL --prompt_file $PROMPT --quantization_scheme fp8"
 echo "Running command: $RUN_COMMAND"
 
 # Run the inference

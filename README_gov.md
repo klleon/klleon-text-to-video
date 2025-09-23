@@ -20,7 +20,9 @@ python cli_demo_quantization.py --prompt "A girl riding a bike." --model_path TH
 ### Gov test [241028]
 1. Prepare `prompts.txt`
 2. Run `1_parse_prompts.sh` to parse the whole prompts into several small prompts.
+    - E.g., `/1_parse_prompts.sh prompts.txt 4`
 3. Run `2_run_inference.sh`
+    - E.g., `./2_run_inference.sh 0`, `./2_run_inference.sh 1`, `./2_run_inference.sh 2`, `./2_run_inference.sh 3`
 4. Run `v2f.py`
 5. Run `is_score_calculate.py`
 

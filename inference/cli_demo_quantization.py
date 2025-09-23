@@ -25,7 +25,7 @@ import torch._dynamo
 from diffusers import AutoencoderKLCogVideoX, CogVideoXTransformer3DModel, CogVideoXPipeline, CogVideoXDPMScheduler
 from diffusers.utils import export_to_video
 from transformers import T5EncoderModel
-from torchao.quantization import quantize_, int8_weight_only
+from torchao.quantization import quantize_, int8_weight_only, float8_weight_only
 # from torchao.float8.inference import ActivationCasting, QuantConfig, quantize_to_float8
 
 os.environ["TORCH_LOGS"] = "+dynamo,output_code,graph_breaks,recompiles"
@@ -41,7 +41,7 @@ def quantize_model(part, quantization_scheme):
     if quantization_scheme == "int8":
         quantize_(part, int8_weight_only())
     elif quantization_scheme == "fp8":
-        quantize_to_float8(part, QuantConfig(ActivationCasting.DYNAMIC))
+        quantize_(part, float8_weight_only())
     return part
 
 class T2VModel():
@@ -95,7 +95,7 @@ class T2VModel():
             prompt=prompt,
             num_videos_per_prompt=num_videos_per_prompt,
             num_inference_steps=num_inference_steps,
-            num_frames=5,
+            num_frames=10,
             use_dynamic_cfg=True,
             guidance_scale=guidance_scale,
             generator=torch.Generator(device="cuda").manual_seed(42),

@@ -28,7 +28,7 @@ from scipy.stats import entropy
 from glob import glob
 
 
-def inception_score(imgs, cuda=True, batch_size=32, resize=False, splits=1):
+def inception_score(imgs, cuda=True, batch_size=32, resize=False, splits=1, bound=2.8):
     """Computes the inception score of the generated images imgs
 
     imgs -- Torch dataset of (3xHxW) numpy images normalized in the range [-1, 1]
@@ -79,10 +79,7 @@ def inception_score(imgs, cuda=True, batch_size=32, resize=False, splits=1):
     for k in range(splits):
         part = preds[k * (N // splits): (k+1) * (N // splits), :]
         py = np.mean(part, axis=0)
-        scores = []
-        for i in range(part.shape[0]):
-            pyx = part[i, :]
-            scores.append(entropy(pyx, py))
+        scores = [entropy(part[i, :], py) for i in range(part.shape[0]) if entropy(part[i, :], py) > bound]
         split_scores.append(np.exp(np.mean(scores)))
 
     return np.mean(split_scores), np.std(split_scores)
