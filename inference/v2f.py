@@ -26,12 +26,13 @@ def convert_videos_to_pngs(video_directory, output_directory):
                     output_folder = output_directory
                     os.makedirs(output_folder, exist_ok=True)
 
-                    # if frame_count > 2:
+                    if frame_count > 2:
                     # 프레임을 PNG 파일로 저장
-                    output_path = os.path.join(output_folder, f'{filename}_{frame_count:04d}.png')
-                    cv2.imwrite(output_path, frame)
+                        output_path = os.path.join(output_folder, f'{filename}_{frame_count:04d}.png')
+                        cv2.imwrite(output_path, frame)
+                        break
                     frame_count += 1
-                    break
+                    # break
                 
                 cap.release()
                 print(f"Extracted {frame_count} frames from {file}")

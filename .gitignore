@@ -8,6 +8,10 @@ logs/
 .idea
 output*
 test*
+.venv/
+CLAUDE.md
+PROJECT_KNOWLEDGE.md
+worklog/
 
 # gov
 inference/prompts/
