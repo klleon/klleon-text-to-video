@@ -2,6 +2,8 @@
 # Run a whole prompt file in one invocation: split the prompts, launch one
 # generation process per GPU in parallel, wait for all jobs and print the
 # total wall time. Outputs go to ./results/ (same as cli_demo_quantization).
+# Each job's log is also streamed to the terminal with a [jobN] prefix
+# (tqdm progress bars filtered out); the full log stays in logs/.
 #
 # Usage: ./2_run_inference_all.sh <prompt-file> [num-jobs]
 #   e.g., ./2_run_inference_all.sh prompts_imagenet.txt      # 4 jobs, 1 per GPU
@@ -50,7 +52,11 @@ BASE_DONE=$(find results -maxdepth 1 -name '*.mp4' 2>/dev/null | wc -l)
 START=$(date +%s)
 PIDS=()
 JOB_IDS=()
+FOLLOW_PIDS=()
 JOB=0
+# Stop the log followers if this script is interrupted. Note: the generation
+# jobs themselves keep running (background jobs ignore SIGINT).
+trap 'kill "${FOLLOW_PIDS[@]}" 2>/dev/null || true' EXIT
 for part in "$SPLIT_DIR"/job_*; do
     if [ ! -s "$part" ]; then
         continue
@@ -58,16 +64,29 @@ for part in "$SPLIT_DIR"/job_*; do
     GPU=${GPUS[$((JOB % ${#GPUS[@]}))]}
     LOG="$LOG_DIR/gen_job_${JOB}_gpu${GPU}.log"
     echo "Job $JOB -> CUDA device $GPU ($(wc -l < "$part") prompts, log: $LOG)"
-    CUDA_VISIBLE_DEVICES=$GPU python "$PY_FILE" \
+    # -u: unbuffered stdout so "Prompt: ..." lines reach the log immediately
+    CUDA_VISIBLE_DEVICES=$GPU python -u "$PY_FILE" \
         --model_path "$MODEL" \
         --prompt_file "$part" \
         --quantization_scheme fp8 > "$LOG" 2>&1 &
     PIDS+=($!)
     JOB_IDS+=("$JOB")
+    # Mirror the log to the terminal: split tqdm's \r redraws into lines,
+    # strip ANSI cursor codes and the bar prefix before "Prompt:", then drop
+    # progress-bar and blank lines. tail exits once the job process exits.
+    tail -n +1 -f --pid="${PIDS[-1]}" "$LOG" \
+        | stdbuf -oL tr '\r' '\n' \
+        | sed -u -e 's/\x1b\[[0-9;]*[A-Za-z]//g' -e 's/^.*\(Prompt: \)/\1/' \
+        | grep --line-buffered -v -E '[0-9]+%\||^[[:space:]]*$' \
+        | sed -u "s/^/[job$JOB] /" &
+    FOLLOW_PIDS+=($!)
     JOB=$((JOB + 1))
 done
 
 # Live progress: refresh one status line every 15s until all jobs exit
+# (printed as a normal line every 60s, plus once at the end, so it does not
+# clobber the streamed job logs)
+TICK=0
 while :; do
     RUNNING=0
     for pid in "${PIDS[@]}"; do
@@ -82,14 +101,19 @@ while :; do
         ETA=$(( (TOTAL - NOW_DONE) * ELAPSED / NOW_DONE ))
         ETA_STR=$(printf '%02d:%02d:%02d' $((ETA / 3600)) $((ETA % 3600 / 60)) $((ETA % 60)))
     fi
-    printf '\r[elapsed %02d:%02d:%02d] %d/%d videos, %d/%d jobs running, ETA %s   ' \
-        $((ELAPSED / 3600)) $((ELAPSED % 3600 / 60)) $((ELAPSED % 60)) \
-        "$NOW_DONE" "$TOTAL" "$RUNNING" "${#PIDS[@]}" "$ETA_STR"
+    if [ $((TICK % 4)) -eq 0 ] || [ "$RUNNING" -eq 0 ]; then
+        printf '[elapsed %02d:%02d:%02d] %d/%d videos, %d/%d jobs running, ETA %s\n' \
+            $((ELAPSED / 3600)) $((ELAPSED % 3600 / 60)) $((ELAPSED % 60)) \
+            "$NOW_DONE" "$TOTAL" "$RUNNING" "${#PIDS[@]}" "$ETA_STR"
+    fi
     if [ "$RUNNING" -eq 0 ]; then
         break
     fi
+    TICK=$((TICK + 1))
     sleep 15
 done
+# Let the log followers flush the jobs' last lines before the summary
+wait "${FOLLOW_PIDS[@]}" 2>/dev/null || true
 echo
 
 FAILED=0
