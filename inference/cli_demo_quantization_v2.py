@@ -30,6 +30,7 @@ import torch
 import torch._dynamo
 from diffusers import AutoencoderKLCogVideoX, CogVideoXTransformer3DModel, CogVideoXPipeline, CogVideoXDPMScheduler
 from diffusers.utils import export_to_video
+from PIL import Image
 from transformers import T5EncoderModel
 from torchao.quantization import quantize_, int8_weight_only, float8_weight_only
 # from torchao.float8.inference import ActivationCasting, QuantConfig, quantize_to_float8
@@ -108,9 +109,15 @@ class T2VModel():
             generator=torch.Generator(device="cuda").manual_seed(42),
         ).frames[0]
 
+        # Upscale 720x480 -> 1080x720 (Lanczos) for the submission resolution.
+        # Comment out this line to save the native 720x480 output instead.
+        video = [frame.resize((1080, 720), Image.LANCZOS) for frame in video]
+
         if not os.path.exists(os.path.dirname(output_path)):
             os.makedirs(os.path.dirname(output_path))
-        export_to_video(video, output_path, fps=8)
+        # macro_block_size=8: 1080 is not a multiple of the default 16, which
+        # would make imageio pad the width to 1088 (720x480 output unchanged)
+        export_to_video(video, output_path, fps=8, macro_block_size=8)
 
 def check_prompt_args(prompt, prompt_file):
     if prompt is None and prompt_file is None:
